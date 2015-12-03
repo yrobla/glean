@@ -29,7 +29,10 @@ from glean import systemlock
 
 post_up = "    post-up route add -net {net} netmask {mask} gw {gw} || true\n"
 pre_down = "    pre-down route del -net {net} netmask {mask} gw {gw} || true\n"
+
 log = logging.getLogger("glean.cmd")
+log.setLevel(logging.DEBUG)
+log.addHandler(logging.FileHandler("/var/log/glean.log"))
 
 
 def _exists_rh_interface(name):
