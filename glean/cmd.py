@@ -310,8 +310,8 @@ def is_interface_live(interface, sys_root):
             return True
     except IOError as e:
         # We get this error if the link is not up
-        log.exception("Exception while checking interface: {0}".format(e, ))
         if e.errno != 22:
+            log.exception("Exception while checking interface: {0}".format(e, ))
             raise
     return False
 
