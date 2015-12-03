@@ -17,6 +17,7 @@
 
 import argparse
 import json
+import logging
 import os
 import platform
 import re
@@ -28,6 +29,7 @@ from glean import systemlock
 
 post_up = "    post-up route add -net {net} netmask {mask} gw {gw} || true\n"
 pre_down = "    pre-down route del -net {net} netmask {mask} gw {gw} || true\n"
+log = logging.getLogger("glean.cmd")
 
 
 def _exists_rh_interface(name):
@@ -95,6 +97,8 @@ TYPE=Ethernet
 
 
 def write_redhat_interfaces(interfaces, sys_interfaces):
+    log.debug("Writing redhat interfaces: {0} {1}".format(
+              interfaces, sys_interfaces))
     files_to_write = dict()
     # Sort the interfaces by id so that we'll have consistent output order
     for iname, interface in sorted(
@@ -134,6 +138,8 @@ def _exists_debian_interface(name):
 
 
 def write_debian_interfaces(interfaces, sys_interfaces):
+    log.debug("Writing debian interfaces: {0} {1}".format(
+              interfaces, sys_interfaces))
     eni_path = '/etc/network/interfaces'
     eni_d_path = eni_path + '.d'
     files_to_write = {}
@@ -203,6 +209,7 @@ def write_debian_interfaces(interfaces, sys_interfaces):
 
 
 def write_dns_info(dns_servers):
+    log.debug("Writing dns info: {0}".format(dns_servers,))
     results = ""
     for server in dns_servers:
         results += "nameserver {0}\n".format(server)
@@ -210,9 +217,11 @@ def write_dns_info(dns_servers):
 
 
 def get_config_drive_interfaces(net):
+    log.debug("Getting config_drive interfaces: {0}".format(net, ))
     interfaces = {}
 
     if 'networks' not in net or 'links' not in net:
+        log.debug("Skipping, networks or links not present")
         return interfaces
 
     # tmp_ifaces is a dict keyed on net id
@@ -247,7 +256,9 @@ def get_config_drive_interfaces(net):
 
 
 def get_dns_from_config_drive(net):
+    log.debug("Getting dns from config_drive: {0}".format(net, ))
     if 'services' not in net:
+        log.debug("Skipping, services not in net")
         return []
     return [
         f['address'] for f in net['services'] if f['type'] == 'dns'
@@ -256,6 +267,8 @@ def get_dns_from_config_drive(net):
 
 def write_static_network_info(
         interfaces, sys_interfaces, files_to_write, args):
+    log.debug("Writing static network info: {0} {1}".format(
+              interfaces, sys_interfaces))
 
     distro = args.distro
     if not distro:
@@ -273,6 +286,7 @@ def write_static_network_info(
 
 
 def finish_files(files_to_write, args):
+    log.debug("Writing files: {0}".format(files_to_write.keys()))
     files = sorted(files_to_write.keys())
     for k in files:
         if not files_to_write[k]:
@@ -286,12 +300,14 @@ def finish_files(files_to_write, args):
 
 
 def is_interface_live(interface, sys_root):
+    log.debug("Checking if interface is live: {0}".format(interface, sys_root))
     try:
         if open('{root}/{iface}/carrier'.format(
                 root=sys_root, iface=interface)).read().strip() == '1':
             return True
     except IOError as e:
         # We get this error if the link is not up
+        log.exception("Exception while checking interface: {0}".format(e, ))
         if e.errno != 22:
             raise
     return False
@@ -311,10 +327,12 @@ def interface_live(iface, sys_root, args):
         if is_interface_live(iface, sys_root):
             return True
         time.sleep(.1)
+    log.error("Interface {0} is not live, skipping".format(iface, ))
     return False
 
 
 def get_sys_interfaces(interface, args):
+    log.debug("Getting sys interfaces for {0}".format(interface, ))
     sys_root = os.path.join(args.root, 'sys/class/net')
 
     sys_interfaces = {}
@@ -322,14 +340,20 @@ def get_sys_interfaces(interface, args):
         interfaces = [interface]
     else:
         interfaces = [f for f in os.listdir(sys_root) if f != 'lo']
+    log.debug("Final interfaces are: {0}".format(interfaces, ))
+
     for iface in interfaces:
         mac_addr_type = open(
             '%s/%s/addr_assign_type' % (sys_root, iface), 'r').read().strip()
         if mac_addr_type != '0':
+            log.debug("Mac for iface {0} with type {1}, skipping".format(
+                      iface, mac_addr_type))
             continue
         mac = open('%s/%s/address' % (sys_root, iface), 'r').read().strip()
         if interface_live(iface, sys_root, args):
+            log.debug("Interface {0} is live, adding".format(iface,))
             sys_interfaces[mac] = iface
+    log.debug("Final sys interfaces are: {0}".format(sys_interfaces,))
     return sys_interfaces
 
 
