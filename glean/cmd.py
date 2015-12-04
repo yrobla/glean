@@ -151,32 +151,43 @@ def write_debian_interfaces(interfaces, sys_interfaces):
     # Sort the interfaces by id so that we'll have consistent output order
     for iname, interface in sorted(
             interfaces.items(), key=lambda x: x[1]['id']):
+        log.debug("I check name {0} with interface {1}".format(iname, interface))
         if iname not in sys_interfaces:
+            log.debug("Interface {0} not in sys_interfaces, skipping")
             continue
         interface = interfaces[iname]
         interface_name = sys_interfaces[iname]
         vlan_raw_device = None
+        log.debug("Current interface has format {0}".format(interface,))
 
         if 'vlan_id' in interface:
+            log.debug("I config vlan")
             vlan_raw_device = interface_name
             interface_name = "{0}.{1}".format(vlan_raw_device,
                                               interface['vlan_id'])
+            log.debug("Interfae name is {0}".format(interface_name,))
 
         iface_path = os.path.join(eni_d_path, '%s.cfg' % interface_name)
+        log.debug("Interface path is {0}".format(iface_path,))
 
         if interface['type'] == 'ipv4_dhcp':
+            log.debug("Interface has type ipv4_dchp, configuring")
             result = "auto {0}\n".format(interface_name)
             result += "iface {0} inet dhcp\n".format(interface_name)
             if vlan_raw_device is not None:
                 result += "    vlan-raw-device {0}\n".format(vlan_raw_device)
+            log.debug("I write {0} with content {1}".format(iface_path, result))
             files_to_write[iface_path] = result
             continue
         if interface['type'] == 'ipv6':
+            log.debug("Iface has type inet6, skipping")
             link_type = "inet6"
         elif interface['type'] == 'ipv4':
+            log.debug("Iface has type ipv4, skipping")
             link_type = "inet"
         # We do not know this type of entry
         if not link_type:
+            log.debug("Iface has type unknown, skipping")
             continue
 
         result = "auto {0}\n".format(interface_name)
@@ -199,14 +210,20 @@ def write_debian_interfaces(interfaces, sys_interfaces):
         files_to_write[iface_path] = result
     for mac, iname in sorted(
             sys_interfaces.items(), key=lambda x: x[1]):
+        log.debug("I configure mac {0}, with name {1}".format(mac, iname))
         if _exists_debian_interface(iname):
+            log.debug("This interface already exists, skipping")
             # This interface already has a config file, move on
             continue
         if mac in interfaces:
+            log.debug("This mac already exists, skipping")
             # We have a config drive config, move on
             continue
         result = "auto {0}\n".format(iname)
         result += "iface {0} inet dhcp\n".format(iname)
+
+        final_file = os.path.join(eni_d_path, "%s.cfg" % iname)
+        log.debug("I configure {0} with result {1}".format(final_file, result))
         files_to_write[os.path.join(eni_d_path, "%s.cfg" % iname)] = result
     return files_to_write
 
@@ -488,6 +505,11 @@ def main():
             set_hostname_from_config_drive(args)
         if args.interface != 'lo' and not args.skip:
             write_network_info_from_config_drive(args)
+
+    handlers = log.handlers[:]
+    for handler in handlers:
+        handler.close()
+        log.removeHandler(handler)
     return 0
 
 
