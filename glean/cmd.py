@@ -30,10 +30,6 @@ from glean import systemlock
 post_up = "    post-up route add -net {net} netmask {mask} gw {gw} || true\n"
 pre_down = "    pre-down route del -net {net} netmask {mask} gw {gw} || true\n"
 
-log = logging.getLogger("glean.cmd")
-log.setLevel(logging.DEBUG)
-log.addHandler(logging.FileHandler("/var/log/glean.log"))
-
 
 def _exists_rh_interface(name):
     file_to_check = '/etc/sysconfig/network-scripts/ifcfg-{name}'.format(
@@ -100,6 +96,8 @@ TYPE=Ethernet
 
 
 def write_redhat_interfaces(interfaces, sys_interfaces):
+    global log
+
     log.debug("Writing redhat interfaces: {0} {1}".format(
               interfaces, sys_interfaces))
     files_to_write = dict()
@@ -141,6 +139,8 @@ def _exists_debian_interface(name):
 
 
 def write_debian_interfaces(interfaces, sys_interfaces):
+    global log
+
     log.debug("Writing debian interfaces: {0} {1}".format(
               interfaces, sys_interfaces))
     eni_path = '/etc/network/interfaces'
@@ -229,6 +229,8 @@ def write_debian_interfaces(interfaces, sys_interfaces):
 
 
 def write_dns_info(dns_servers):
+    global log
+
     log.debug("Writing dns info: {0}".format(dns_servers,))
     results = ""
     for server in dns_servers:
@@ -237,6 +239,8 @@ def write_dns_info(dns_servers):
 
 
 def get_config_drive_interfaces(net):
+    global log
+
     log.debug("Getting config_drive interfaces: {0}".format(net, ))
     interfaces = {}
 
@@ -276,6 +280,8 @@ def get_config_drive_interfaces(net):
 
 
 def get_dns_from_config_drive(net):
+    global log
+
     log.debug("Getting dns from config_drive: {0}".format(net, ))
     if 'services' not in net:
         log.debug("Skipping, services not in net")
@@ -287,6 +293,8 @@ def get_dns_from_config_drive(net):
 
 def write_static_network_info(
         interfaces, sys_interfaces, files_to_write, args):
+    global log
+
     log.debug("Writing static network info: {0} {1}".format(
               interfaces, sys_interfaces))
 
@@ -306,6 +314,8 @@ def write_static_network_info(
 
 
 def finish_files(files_to_write, args):
+    global log
+
     log.debug("Writing files: {0}".format(files_to_write.keys()))
     files = sorted(files_to_write.keys())
     for k in files:
@@ -320,6 +330,8 @@ def finish_files(files_to_write, args):
 
 
 def is_interface_live(interface, sys_root):
+    global log
+
     log.debug("Checking if interface is live: {0}".format(interface, sys_root))
     try:
         if open('{root}/{iface}/carrier'.format(
@@ -334,6 +346,8 @@ def is_interface_live(interface, sys_root):
 
 
 def interface_live(iface, sys_root, args):
+    global log
+
     if is_interface_live(iface, sys_root):
         return True
 
@@ -352,6 +366,8 @@ def interface_live(iface, sys_root, args):
 
 
 def get_sys_interfaces(interface, args):
+    global log
+
     log.debug("Getting sys interfaces for {0}".format(interface, ))
     sys_root = os.path.join(args.root, 'sys/class/net')
 
@@ -477,6 +493,13 @@ def set_hostname_from_config_drive(args):
 
 
 def main():
+    global log
+
+    log = logging.getLogger("glean.cmd")
+    log.setLevel(logging.DEBUG)
+    log.addHandler(logging.FileHandler("/var/log/glean.log"))
+    log.debug("Glean being called")
+
     parser = argparse.ArgumentParser(description="Static network config")
     parser.add_argument(
         '-n', '--noop', action='store_true', help='Do not write files')
@@ -498,12 +521,18 @@ def main():
         '--skip-network', dest='skip', action='store_true',
         help="Do not write network info")
     args = parser.parse_args()
+    log.debug("Glean args are {0}".format(args,))
+
     with systemlock.Lock('/tmp/glean.lock'):
+        log.debug("I get systemlock")
         if args.ssh:
+            log.debug("In ssh case")
             write_ssh_keys(args)
         if args.hostname:
+            log.debug("In hostname case")
             set_hostname_from_config_drive(args)
         if args.interface != 'lo' and not args.skip:
+            log.debug("In interface case")
             write_network_info_from_config_drive(args)
 
     handlers = log.handlers[:]
